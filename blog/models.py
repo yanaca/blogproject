@@ -2,6 +2,8 @@ from django.db import models
 from django.urls import reverse
 from django.contrib.auth.models import User
 from django.utils.six import python_2_unicode_compatible
+import markdown
+from django.utils.html import strip_tags
 
 # Create your models here.
 @python_2_unicode_compatible
@@ -68,6 +70,9 @@ class Post(models.Model):
     # 因为我们规定一篇文章只能有一个作者，而一个作者可能会写多篇文章，因此这是一对多的关联关系，和 Category 类似。
     author = models.ForeignKey(User)
 
+    #统计文章阅读数量
+    views = models.PositiveIntegerField(default=0)
+
     def __str__(self):
         return self.title
 
@@ -76,6 +81,24 @@ class Post(models.Model):
 
     #加上这个属性以后，在任意场景获取post列表都是按照这个顺序排列的。就不需要在每次取列表 Post.objects.all().order_by('-create_time') 时都带上排序。
     class Meta:
-        ordering = ['-create_time', 'title']
+        ordering = ['-created_time', 'title']
 
+    #文章详情页面被打开以后,文章统计数+1
+    def increase_views(self):
+        self.views += 1
+        self.save(update_fields=['views'])
+
+    #在摘要为空的情况下,自动填充body的前54个字符
+    def save(self, *args, **kwargs):
+        if not self.excerpt:
+            md = markdown.Markdown(extensions=['markdown.extensions.extra',
+                                               'markdown.extensions.codehilite'])
+            #先将markdown文本渲染成html
+            #然后在用strip_tags去掉html标签
+            self.excerpt = strip_tags(md.convert(self.body))[:54]
+        super(Post, self).save(*args, **kwargs)
+
+    def get_comment_num(self):
+        comment_list = self.comment_set.all()
+        return len(comment_list)
 
